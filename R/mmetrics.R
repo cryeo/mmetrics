@@ -19,12 +19,8 @@ NULL
 #'   [quos][rlang::quos], [dplyr's vignettes](https://cran.r-project.org/package=dplyr/vignettes/programming.html)
 #'
 #' @export
-define <- function(...){
-  rlang::quos(...)
-}
+define <- rlang::quos
 
-#' Add metrics to data.frame
-#'
 #' Add metrics to data.frame
 #'
 #' @param df data.frame
@@ -41,10 +37,10 @@ define <- function(...){
 #'   age = (1:10)*10,
 #'   cost = c(51:60),
 #'   impression = c(101:110),
-#'   click = c(0:9)*3
+#'   click = c(0:9)*3df
 #' )
 #'
-# Example metrics
+#' # Example metrics
 #' metrics <- mmetrics::define(
 #'   cost = sum(cost),
 #'   ctr  = sum(click)/sum(impression)
@@ -54,37 +50,36 @@ define <- function(...){
 #' mmetrics::add(df, gender, metrics = metrics)
 #'
 #' @export
-add <- function(df, ..., metrics = ad_metrics, summarize = TRUE){
+add <- function(df,
+                ...,
+                metrics = ad_metrics,
+                summarize = TRUE) {
   group_vars <- rlang::enquos(...)
 
-  if(summarize){
-    gsummarize(df, !!!group_vars, metrics = metrics)
-  } else{
-    gmutate(df, !!!group_vars, metrics = metrics)
+  if (summarize) {
+    gsummarize(df,!!!group_vars, metrics = metrics)
+  } else {
+    gmutate(df,!!!group_vars, metrics = metrics)
   }
 }
 
 #' @rdname add
 #' @export
-gsummarize <- function(df, ..., metrics){
-  group_vars <- rlang::enquos(...)
-  metrics <- mfilter(metrics, df)
-  df %>%
-    dplyr::group_by(!!!group_vars) %>%
-    dplyr::summarise(!!!metrics) %>%
-    dplyr::ungroup()
-}
+gsummarize <- dplyr::summarise %>% gprocess
+
 #' @rdname add
 gsummarise <- gsummarize
 
 #' @rdname add
 #' @export
-gmutate <- function(df, ..., metrics){
+gmutate <- dplyr::mutate %>% gprocess
+
+gprocess <- function(func, df, ..., metrics) {
   group_vars <- rlang::enquos(...)
   metrics <- mfilter(metrics, df)
   df %>%
     dplyr::group_by(!!!group_vars) %>%
-    dplyr::mutate(!!!metrics) %>%
+    func(!!!metrics) %>%
     dplyr::ungroup()
 }
 
@@ -96,11 +91,18 @@ gmutate <- function(df, ..., metrics){
 #' @param df data.frame
 #'
 #' @export
-mfilter <- function(metrics, df){
-  is_evaluatable <- function(metrics, df){
-    out <- tryCatch(eval(rlang::quo_squash(metrics), envir = df), error = function(e) e, silent = TRUE)
-    !(any(class(out) == "error"))
+mfilter <- function(metrics, df) {
+  is_evaluatable <- function(metrics, df) {
+    out <-
+      tryCatch(
+        eval(rlang::quo_squash(metrics), envir = df),
+        error = function(e)
+          e,
+        silent = TRUE
+      )
+    ! (any(class(out) == "error"))
   }
-  is_effective <- unlist(purrr::map(metrics, ~ is_evaluatable(.x, df)))
+  is_effective <-
+    unlist(purrr::map(metrics, ~ is_evaluatable(.x, df)))
   metrics[is_effective]
 }
